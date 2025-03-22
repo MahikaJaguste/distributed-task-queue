@@ -1,0 +1,37 @@
+package tasksubmission
+
+import (
+	"fmt"
+	"net/http"
+
+	db "github.com/MahikaJaguste/distributed-task-queue/task-submission/database"
+
+	forms "github.com/albrow/forms"
+)
+
+func HandleTaskSubmission(w http.ResponseWriter, req *http.Request) {
+	data, err := forms.Parse(req)
+	if err != nil {
+		// in case of any error
+		// TODO
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	taskId := data.Get("taskId")
+
+	result, err := db.DBCon.Exec("INSERT INTO tasks (taskId) VALUES (?)", taskId)
+	if err != nil {
+		// TODO
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		// TODO
+		return
+	}
+	fmt.Printf("Task created with id = %d\n", id)
+	w.Write(([]byte)(fmt.Sprintf("Task created with id = %d\n", id)))
+}
