@@ -16,14 +16,23 @@ var (
 
 var ENV_FILE_PATH = "../../.env"
 
+type Task struct {
+	Id          int
+	Name        string
+	PickedAt    time.Time
+	ProcessedAt time.Time
+	CompletedAt time.Time
+}
+
 func SetupDb() {
 
 	cfg := mysql.Config{
-		User:   os.Getenv("DB_USER"),
-		Passwd: os.Getenv("DB_PASSWORD"),
-		Net:    "tcp",
-		Addr:   os.Getenv("DB_HOST"),
-		DBName: os.Getenv("DB_NAME"),
+		User:      os.Getenv("DB_USER"),
+		Passwd:    os.Getenv("DB_PASSWORD"),
+		Net:       "tcp",
+		Addr:      os.Getenv("DB_HOST"),
+		DBName:    os.Getenv("DB_NAME"),
+		ParseTime: true,
 	}
 
 	var err error

@@ -2,14 +2,36 @@ package submission
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/MahikaJaguste/distributed-task-queue/pkg/common/db"
+	"github.com/joho/godotenv"
 
 	forms "github.com/albrow/forms"
 )
 
-func HandleTaskSubmission(w http.ResponseWriter, req *http.Request) {
+func StartSubmissionServer() {
+	err := godotenv.Load(db.ENV_FILE_PATH)
+	if err != nil {
+		log.Fatalf("Error loading .env file")
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /submit", handleTaskSubmission)
+
+	db.SetupDb()
+
+	port := 8080
+	fmt.Printf("Server listening on %d!\n", port)
+	err = http.ListenAndServe(fmt.Sprintf(":%d", port), mux)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+}
+
+func handleTaskSubmission(w http.ResponseWriter, req *http.Request) {
 	data, err := forms.Parse(req)
 	if err != nil {
 		// in case of any error

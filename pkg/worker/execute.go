@@ -4,9 +4,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 
 	forms "github.com/albrow/forms"
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/joho/godotenv"
 
 	"github.com/MahikaJaguste/distributed-task-queue/pkg/common/db"
 )
@@ -17,7 +20,26 @@ type WorkerResponse struct {
 	Status string
 }
 
-func HandleTaskExecution(w http.ResponseWriter, req *http.Request) {
+func StartWorkerServer() {
+	err := godotenv.Load(db.ENV_FILE_PATH)
+	if err != nil {
+		log.Fatalf("Error loading .env file")
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /execute", handleTaskExecution)
+
+	db.SetupDb()
+
+	port := 8001
+	fmt.Printf("Server listening on %d!\n", port)
+	err = http.ListenAndServe(fmt.Sprintf(":%d", port), mux)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func handleTaskExecution(w http.ResponseWriter, req *http.Request) {
 	data, err := forms.Parse(req)
 	if err != nil {
 		// in case of any error
@@ -43,7 +65,7 @@ func HandleTaskExecution(w http.ResponseWriter, req *http.Request) {
 }
 
 func execute(taskId int) {
-	row := db.DBCon.QueryRow("select * from tasks where id=?", taskId)
+	row := db.DBCon.QueryRow("select id, name from tasks where id=?", taskId)
 	var id int
 	var name string
 	if err := row.Scan(&id, &name); err != nil {
