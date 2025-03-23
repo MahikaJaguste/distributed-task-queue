@@ -1,10 +1,10 @@
-package tasksubmission
+package submission
 
 import (
 	"fmt"
 	"net/http"
 
-	db "github.com/MahikaJaguste/distributed-task-queue/task-submission/database"
+	"github.com/MahikaJaguste/distributed-task-queue/pkg/common/db"
 
 	forms "github.com/albrow/forms"
 )

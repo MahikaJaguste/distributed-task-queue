@@ -1,4 +1,4 @@
-package database
+package db
 
 import (
 	"database/sql"
@@ -13,6 +13,8 @@ import (
 var (
 	DBCon *sql.DB
 )
+
+var ENV_FILE_PATH = "../../.env"
 
 func SetupDb() {
 

@@ -8,18 +8,18 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
 
-	db "github.com/MahikaJaguste/distributed-task-queue/task-submission/database"
-	ts "github.com/MahikaJaguste/distributed-task-queue/task-submission/tasksubmission"
+	"github.com/MahikaJaguste/distributed-task-queue/pkg/common/db"
+	"github.com/MahikaJaguste/distributed-task-queue/pkg/submission"
 )
 
 func main() {
-	err := godotenv.Load(".env")
+	err := godotenv.Load(db.ENV_FILE_PATH)
 	if err != nil {
 		log.Fatalf("Error loading .env file")
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /submit", ts.HandleTaskSubmission)
+	mux.HandleFunc("POST /submit", submission.HandleTaskSubmission)
 
 	db.SetupDb()
 

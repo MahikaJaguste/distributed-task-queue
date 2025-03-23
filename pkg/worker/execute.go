@@ -1,4 +1,4 @@
-package taskexecution
+package worker
 
 import (
 	"database/sql"
@@ -8,7 +8,7 @@ import (
 
 	forms "github.com/albrow/forms"
 
-	db "github.com/MahikaJaguste/distributed-task-queue/task-submission/database"
+	"github.com/MahikaJaguste/distributed-task-queue/pkg/common/db"
 )
 
 type WorkerResponse struct {
@@ -34,7 +34,7 @@ func HandleTaskExecution(w http.ResponseWriter, req *http.Request) {
 
 	response := WorkerResponse{
 		Id:     taskId,
-		Body:   fmt.Sprintf("Task with id = %d is picked\n", taskId),
+		Body:   fmt.Sprintf("Task with id = %d is picked", taskId),
 		Status: "PICKED",
 	}
 
