@@ -1,11 +1,13 @@
 package coordinator
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -13,6 +15,8 @@ import (
 
 	"github.com/MahikaJaguste/distributed-task-queue/pkg/common/db"
 )
+
+var FETCHING_LIMIT = 2
 
 type WorkerInfo struct {
 	Addr string
@@ -28,7 +32,7 @@ type CoordinatorServer struct {
 var coordinatorServer CoordinatorServer
 var nextWorkerId = 0
 
-func StartCoordinatorServer() {
+func StartCoordinatorServer(port int) {
 	err := godotenv.Load(db.ENV_FILE_PATH)
 	if err != nil {
 		log.Fatalf("Error loading .env file")
@@ -39,13 +43,12 @@ func StartCoordinatorServer() {
 
 	db.SetupDb()
 
-	port := 8000
 	coordinatorServer.Port = port
 	coordinatorServer.WorkerList = make([]WorkerInfo, 0)
-	// coordinatorServer.WorkerList = append(coordinatorServer.WorkerList, WorkerInfo{
-	// 	Addr: "localhost",
-	// 	Port: 8001,
-	// })
+	coordinatorServer.WorkerList = append(coordinatorServer.WorkerList, WorkerInfo{
+		Addr: "localhost",
+		Port: 8001,
+	})
 	// coordinatorServer.WorkerList = append(coordinatorServer.WorkerList, WorkerInfo{
 	// 	Addr: "localhost",
 	// 	Port: 8002,
@@ -53,7 +56,7 @@ func StartCoordinatorServer() {
 
 	go distributeTasksJob()
 
-	fmt.Printf("Server listening on %d!\n", port)
+	fmt.Printf("Coordinator server listening on %d!\n", port)
 	err = http.ListenAndServe(fmt.Sprintf(":%d", port), mux)
 	if err != nil {
 		log.Fatal(err)
@@ -73,60 +76,74 @@ func distributeTasksJob() {
 			continue
 		}
 
-		tasks, err := scanTasks()
+		taskIds, err := scanTasks()
 		if err != nil {
 			fmt.Println("Error in scanning tasks")
+			fmt.Println(err)
 			continue
 		}
-		fmt.Println("tasks:", tasks)
+		fmt.Println("taskIds:", taskIds)
 
-		distributeTasks(tasks)
+		distributeTasks(taskIds)
 
 	}
 }
-func scanTasks() ([]db.Task, error) {
+func scanTasks() ([]int, error) {
 	fmt.Println("Inside scanTasks")
-	var tasks []db.Task
+	var taskIds []int
 
-	rows, err := db.DBCon.Query("SELECT id, name FROM tasks WHERE pickedAt is NULL")
+	ctx := context.Background()
+
+	tx, err := db.DBCon.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, err
+		return taskIds, err
+	}
+	// Defer a rollback in case anything fails.
+	defer tx.Rollback()
+
+	rows, err := tx.QueryContext(ctx, "select id from tasks where pickedAt is null limit ? for update skip locked", FETCHING_LIMIT)
+	if err != nil {
+		return taskIds, err
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		var task db.Task
-		if err := rows.Scan(&task.Id, &task.Name); err != nil {
-			// todo
+		var taskId int
+		if err := rows.Scan(&taskId); err != nil {
 			fmt.Println("Error in scanning row")
-			return nil, err
-		}
-		fmt.Println(task)
-		_, err := db.DBCon.Exec("UPDATE tasks SET pickedAt = ? WHERE id=? AND pickedAt is NULL", time.Now(), task.Id)
-
-		if err != nil {
-			fmt.Println("Error in updating pickedAt")
 			continue
 		}
-		tasks = append(tasks, task)
-
+		fmt.Println(taskId)
+		taskIds = append(taskIds, taskId)
 	}
 
-	if err := rows.Err(); err != nil {
-		fmt.Println("Error in rows")
-		return nil, err
+	if len(taskIds) != 0 {
+		idStr := "(" + strings.Trim(strings.Join(strings.Fields(fmt.Sprint(taskIds)), ","), "[]") + ")"
+		updateQuery := fmt.Sprintf("update tasks set pickedAt = now() WHERE id in %s", idStr)
+
+		_, err = tx.ExecContext(ctx, updateQuery)
+		if err != nil {
+			fmt.Println("Error in updating pickedAt")
+			return []int{}, err
+		}
 	}
-	return tasks, nil
+
+	// Commit the transaction.
+	if err = tx.Commit(); err != nil {
+		return []int{}, err
+	}
+
+	return taskIds, nil
 }
 
-func distributeTasks(tasks []db.Task) {
-	for _, task := range tasks {
+func distributeTasks(taskIds []int) {
+	for _, taskId := range taskIds {
 		worker, err := getNextWorker()
 		if err != nil {
 			fmt.Println("Error in getting next worker")
 			break
 		}
-		go assignTask(task, worker)
+		go assignTask(taskId, worker)
 	}
 }
 
@@ -143,15 +160,15 @@ func hasAvailableWorkers() bool {
 	return len(coordinatorServer.WorkerList) != 0
 }
 
-func assignTask(task db.Task, worker WorkerInfo) {
+func assignTask(taskId int, worker WorkerInfo) {
 	endpoint := fmt.Sprintf("http://%s:%d/execute", worker.Addr, worker.Port)
 	v := url.Values{}
-	v.Add("taskId", fmt.Sprintf("%d", task.Id))
-	resp, err := http.PostForm(endpoint, v)
+	v.Add("taskId", fmt.Sprintf("%d", taskId))
+	_, err := http.PostForm(endpoint, v)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println(resp.Body)
+	// fmt.Println(resp.Body)
 
 }

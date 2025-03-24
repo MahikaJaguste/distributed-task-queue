@@ -20,7 +20,7 @@ type WorkerResponse struct {
 	Status string
 }
 
-func StartWorkerServer() {
+func StartWorkerServer(port int) {
 	err := godotenv.Load(db.ENV_FILE_PATH)
 	if err != nil {
 		log.Fatalf("Error loading .env file")
@@ -31,8 +31,7 @@ func StartWorkerServer() {
 
 	db.SetupDb()
 
-	port := 8001
-	fmt.Printf("Server listening on %d!\n", port)
+	fmt.Printf("Worker server listening on %d!\n", port)
 	err = http.ListenAndServe(fmt.Sprintf(":%d", port), mux)
 	if err != nil {
 		log.Fatal(err)

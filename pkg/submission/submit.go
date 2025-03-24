@@ -11,7 +11,7 @@ import (
 	forms "github.com/albrow/forms"
 )
 
-func StartSubmissionServer() {
+func StartSubmissionServer(port int) {
 	err := godotenv.Load(db.ENV_FILE_PATH)
 	if err != nil {
 		log.Fatalf("Error loading .env file")
@@ -22,8 +22,7 @@ func StartSubmissionServer() {
 
 	db.SetupDb()
 
-	port := 8080
-	fmt.Printf("Server listening on %d!\n", port)
+	fmt.Printf("Submission server listening on %d!\n", port)
 	err = http.ListenAndServe(fmt.Sprintf(":%d", port), mux)
 	if err != nil {
 		log.Fatal(err)
