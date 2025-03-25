@@ -41,7 +41,7 @@ func handleTaskSubmission(w http.ResponseWriter, req *http.Request) {
 
 	name := data.Get("name")
 
-	result, err := db.DBCon.Exec("INSERT INTO tasks (name) VALUES (?)", name)
+	result, err := db.DBCon.Exec("INSERT INTO tasks (name, status) VALUES (?, ?)", name, db.Pending)
 	if err != nil {
 		// TODO
 		w.WriteHeader(http.StatusInternalServerError)

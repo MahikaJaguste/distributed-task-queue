@@ -7,8 +7,7 @@ import (
 )
 
 func main() {
-	var port int
-	flag.IntVar(&port, "port", 8000, "port for container")
+	flag.IntVar(&worker.CONCURRENCY, "concurrency", 5, "concurrency limit for  worker")
 	flag.Parse()
-	worker.StartWorkerServer(port)
+	worker.StartWorkerServer()
 }

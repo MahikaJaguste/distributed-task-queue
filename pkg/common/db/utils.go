@@ -16,13 +16,22 @@ var (
 
 var ENV_FILE_PATH = "../../.env"
 
+type TaskStatus int
 type Task struct {
 	Id          int
 	Name        string
 	PickedAt    time.Time
 	ProcessedAt time.Time
 	CompletedAt time.Time
+	WorkerId    int
+	Status      TaskStatus
 }
+
+const (
+	Pending TaskStatus = iota
+	Processing
+	Completed
+)
 
 func SetupDb() {
 
