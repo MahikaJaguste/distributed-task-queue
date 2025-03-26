@@ -28,8 +28,8 @@ func StartRetryJobServer() {
 func handleFailedTasks() (int, error) {
 	log.Println("Handling failed tasks")
 
-	expiryDuration := worker.HEARTBEAT_DURATION * 3 // ie. failed 3 heartbeats
-	expiry := time.Now().Add(time.Duration(-expiryDuration) * time.Second).Format(time.DateTime)
+	expiryDuration := -worker.HEARTBEAT_DURATION * 3 // ie. failed 3 heartbeats
+	expiry := time.Now().Add(expiryDuration).Format(time.DateTime)
 	result, err := db.DBCon.Exec("update tasks set pickedAt = null, processedAt = null, workerId = null, status = ? WHERE status = ? and processedAt < ?", db.Pending, db.Processing, expiry)
 	if err != nil {
 		return 0, err
