@@ -15,6 +15,8 @@ import (
 
 var CONCURRENCY int
 var WORKER_ID int
+var HEARTBEAT_DURATION = time.Second * 10
+var SCAN_INTERVAL = time.Second * 10
 
 func StartWorkerServer() {
 	err := godotenv.Load(db.ENV_FILE_PATH)
@@ -42,12 +44,13 @@ func setWorkerId() error {
 	// Defer a rollback in case anything fails.
 	defer tx.Rollback()
 
-	_, err = tx.ExecContext(ctx, "update workerCount set count = count+1 WHERE id = 1")
+	_, err = tx.Exec("update workerCount set count = count+1 WHERE id = 1")
+
 	if err != nil {
 		return err
 	}
 
-	row := tx.QueryRowContext(ctx, "select count from workerCount where id = 1")
+	row := tx.QueryRow("select count from workerCount where id = 1")
 
 	if err := row.Scan(&WORKER_ID); err != nil {
 		return err
@@ -60,6 +63,44 @@ func setWorkerId() error {
 
 	fmt.Printf("Worker ID: %d\n", WORKER_ID)
 	return nil
+}
+
+func handleTaskExecution() {
+	ticker := time.NewTicker(SCAN_INTERVAL)
+	defer ticker.Stop()
+
+	parallelWorkers := make(chan struct{}, CONCURRENCY)
+
+	for range ticker.C {
+
+		select {
+		case parallelWorkers <- struct{}{}: // Only proceed if there's a free slot
+		default:
+			// CONCURRENCY workers already present
+			fmt.Println("Max parallelism reached, skipping this cycle")
+			continue // Skip iteration if all worker slots are occupied
+		}
+
+		taskId, err := scanTasks()
+		if err != nil {
+			fmt.Println("Error in scanning tasks")
+			fmt.Println(err)
+			<-parallelWorkers
+			continue
+		} else if taskId == -1 {
+			fmt.Println("No more tasks currently")
+			<-parallelWorkers
+			continue
+		}
+
+		fmt.Println("TaskId:", taskId)
+		fmt.Printf("Task with id = %d is picked\n", taskId)
+
+		go func() {
+			execute(taskId)
+			<-parallelWorkers // removes a struct from parallelWorkers, allowing another to proceed
+		}()
+	}
 }
 
 func scanTasks() (int, error) {
@@ -75,7 +116,7 @@ func scanTasks() (int, error) {
 	// Defer a rollback in case anything fails.
 	defer tx.Rollback()
 
-	row := tx.QueryRowContext(ctx, "select id from tasks where status = ? limit 1 for update skip locked", db.Pending)
+	row := tx.QueryRow("select id from tasks where status = ? limit 1 for update skip locked", db.Pending)
 
 	if err := row.Scan(&taskId); err != nil {
 		if err == sql.ErrNoRows {
@@ -83,7 +124,7 @@ func scanTasks() (int, error) {
 		}
 	}
 
-	_, err = tx.ExecContext(ctx, "update tasks set pickedAt = now(), processedAt = now(), workerId = ?, status = ? WHERE id = ?", WORKER_ID, db.Processing, taskId)
+	_, err = tx.Exec("update tasks set pickedAt = now(), processedAt = now(), workerId = ?, status = ? WHERE id = ?", WORKER_ID, db.Processing, taskId)
 	if err != nil {
 		fmt.Println("Error in updating pickedAt")
 		return -1, err
@@ -95,35 +136,6 @@ func scanTasks() (int, error) {
 	}
 
 	return taskId, nil
-}
-
-func handleTaskExecution() {
-	parallelWorkers := make(chan struct{}, CONCURRENCY)
-	for range time.Tick(time.Second * 10) {
-
-		parallelWorkers <- struct{}{} // will block if there is CONCURRENCY workers already present
-
-		taskId, err := scanTasks()
-		if err != nil {
-			fmt.Println("Error in scanning tasks")
-			fmt.Println(err)
-		} else if taskId == -1 {
-			fmt.Println("No more tasks currently")
-		}
-
-		if err != nil || taskId == -1 {
-			<-parallelWorkers
-			continue
-		}
-
-		fmt.Println("TaskId:", taskId)
-		fmt.Printf("Task with id = %d is picked\n", taskId)
-
-		go func() {
-			execute(taskId)
-			<-parallelWorkers // removes a struct from parallelWorkers, allowing another to proceed
-		}()
-	}
 }
 
 func execute(taskId int) {
@@ -150,8 +162,10 @@ func execute(taskId int) {
 
 	fmt.Printf("Starting sleep for taskId = %d at %d\n", taskId, time.Now().Unix())
 	fmt.Printf("Task %d: %s\n", taskId, name)
-	time.Sleep(time.Minute * 1)
+	time.Sleep(time.Minute)
 	fmt.Printf("Sleep done for taskId = %d at %d\n", taskId, time.Now().Unix())
+
+	cancelHeartbeat()
 
 	fmt.Printf("Updating completed at for taskId = %d at %d\n", taskId, time.Now().Unix())
 	_, err := db.DBCon.Exec("update tasks set completedAt = now(), status = ? WHERE id = ? and workerId = ?", db.Completed, taskId, WORKER_ID)
@@ -163,8 +177,9 @@ func execute(taskId int) {
 }
 
 func sendHeartbeat(ctx context.Context, taskId int) {
-	heartbeatTicker := time.NewTicker(time.Second * 10)
+	heartbeatTicker := time.NewTicker(HEARTBEAT_DURATION)
 	defer heartbeatTicker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done(): // if cancelHeartbeat() execute
@@ -172,8 +187,12 @@ func sendHeartbeat(ctx context.Context, taskId int) {
 			return
 		case <-heartbeatTicker.C:
 			fmt.Printf("Sending hearbeat for taskId = %d at %d\n", taskId, time.Now().Unix())
-			_, err := db.DBCon.Exec("update tasks set processedAt = now() WHERE id = ? and workerId = ?", taskId, WORKER_ID)
+			_, err := db.DBCon.ExecContext(ctx, "update tasks set processedAt = now() WHERE id = ? and workerId = ?", taskId, WORKER_ID)
 			if err != nil {
+				if err == context.Canceled {
+					fmt.Printf("Shutting down hearbeat for taskId = %d at %d\n", taskId, time.Now().Unix())
+					return
+				}
 				fmt.Printf("Error in sending heartbeat for taskId = %d at %d\n", taskId, time.Now().Unix())
 				fmt.Println(err)
 			}

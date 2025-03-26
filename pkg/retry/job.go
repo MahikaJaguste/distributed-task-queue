@@ -9,6 +9,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/MahikaJaguste/distributed-task-queue/pkg/common/db"
+	"github.com/MahikaJaguste/distributed-task-queue/pkg/worker"
 )
 
 var CONCURRENCY int
@@ -28,8 +29,8 @@ func StartRetryJobServer() {
 func handleFailedTasks() (int, error) {
 	fmt.Println("Inside handleFailedTasks")
 
-	expiryDuration := 5 // 5 minutes
-	expiry := time.Now().Add(time.Duration(-expiryDuration) * time.Minute).Format(time.DateTime)
+	expiryDuration := worker.HEARTBEAT_DURATION * 3 // ie. failed 3 heartbeats
+	expiry := time.Now().Add(time.Duration(-expiryDuration) * time.Second).Format(time.DateTime)
 	result, err := db.DBCon.Exec("update tasks set pickedAt = null, processedAt = null, workerId = null, status = ? WHERE status = ? and processedAt < ?", db.Pending, db.Processing, expiry)
 	if err != nil {
 		fmt.Println("Error in updating failed tasks")
@@ -47,7 +48,7 @@ func handleFailedTasks() (int, error) {
 }
 
 func handleRetry() {
-	for range time.Tick(time.Minute * 5) {
+	for range time.Tick(worker.HEARTBEAT_DURATION * 3) {
 
 		rowsAffected, err := handleFailedTasks()
 		if err != nil {
