@@ -22,7 +22,7 @@ func StartSubmissionServer(port int) {
 
 	db.SetupDb()
 
-	fmt.Printf("Submission server listening on %d!\n", port)
+	log.Printf("Submission server listening on %d!\n", port)
 	err = http.ListenAndServe(fmt.Sprintf(":%d", port), mux)
 	if err != nil {
 		log.Fatal(err)
@@ -53,6 +53,6 @@ func handleTaskSubmission(w http.ResponseWriter, req *http.Request) {
 		// TODO
 		return
 	}
-	fmt.Printf("Task created with id = %d\n", id)
+	log.Printf("Task created with id = %d\n", id)
 	w.Write(([]byte)(fmt.Sprintf("Task created with id = %d\n", id)))
 }

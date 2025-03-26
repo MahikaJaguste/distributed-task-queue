@@ -1,7 +1,6 @@
 package retry
 
 import (
-	"fmt"
 	"log"
 	"time"
 
@@ -27,19 +26,17 @@ func StartRetryJobServer() {
 }
 
 func handleFailedTasks() (int, error) {
-	fmt.Println("Inside handleFailedTasks")
+	log.Println("Handling failed tasks")
 
 	expiryDuration := worker.HEARTBEAT_DURATION * 3 // ie. failed 3 heartbeats
 	expiry := time.Now().Add(time.Duration(-expiryDuration) * time.Second).Format(time.DateTime)
 	result, err := db.DBCon.Exec("update tasks set pickedAt = null, processedAt = null, workerId = null, status = ? WHERE status = ? and processedAt < ?", db.Pending, db.Processing, expiry)
 	if err != nil {
-		fmt.Println("Error in updating failed tasks")
 		return 0, err
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		fmt.Println("Error in updating failed tasks")
 		return 0, err
 	}
 
@@ -52,12 +49,11 @@ func handleRetry() {
 
 		rowsAffected, err := handleFailedTasks()
 		if err != nil {
-			fmt.Println("Error in handling failed tasks")
-			fmt.Println(err)
+			log.Println("Error in handling failed tasks: ", err)
 			continue
 		}
 
-		fmt.Printf("Retry service affected %d rows.\n", rowsAffected)
+		log.Printf("Retry service affected %d rows.\n", rowsAffected)
 
 	}
 }

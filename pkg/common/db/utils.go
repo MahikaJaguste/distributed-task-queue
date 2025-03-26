@@ -2,7 +2,6 @@ package db
 
 import (
 	"database/sql"
-	"fmt"
 	"log"
 	"os"
 	"time"
@@ -58,5 +57,5 @@ func SetupDb() {
 		log.Fatal(pingErr)
 	}
 
-	fmt.Println("DB Connected!")
+	log.Println("DB Connected!")
 }

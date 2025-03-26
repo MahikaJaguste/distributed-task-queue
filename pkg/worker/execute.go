@@ -27,8 +27,7 @@ func StartWorkerServer() {
 	db.SetupDb()
 	err = setWorkerId()
 	if err != nil {
-		fmt.Println("Error in registering worker")
-		log.Fatal(err)
+		log.Fatal("Error in registering worker: ", err)
 	}
 
 	handleTaskExecution()
@@ -61,7 +60,7 @@ func setWorkerId() error {
 		return err
 	}
 
-	fmt.Printf("Worker ID: %d\n", WORKER_ID)
+	log.Printf("Worker ID: %d\n", WORKER_ID)
 	return nil
 }
 
@@ -70,6 +69,7 @@ func handleTaskExecution() {
 	defer ticker.Stop()
 
 	parallelWorkers := make(chan struct{}, CONCURRENCY)
+	defer close(parallelWorkers)
 
 	for range ticker.C {
 
@@ -77,24 +77,23 @@ func handleTaskExecution() {
 		case parallelWorkers <- struct{}{}: // Only proceed if there's a free slot
 		default:
 			// CONCURRENCY workers already present
-			fmt.Println("Max parallelism reached, skipping this cycle")
+			log.Println("Max parallelism reached, skipping this cycle")
 			continue // Skip iteration if all worker slots are occupied
 		}
 
 		taskId, err := scanTasks()
 		if err != nil {
-			fmt.Println("Error in scanning tasks")
-			fmt.Println(err)
+			log.Println("Error in scanning tasks: ", err)
 			<-parallelWorkers
 			continue
 		} else if taskId == -1 {
-			fmt.Println("No more tasks currently")
+			log.Println("No more tasks currently")
 			<-parallelWorkers
 			continue
 		}
 
-		fmt.Println("TaskId:", taskId)
-		fmt.Printf("Task with id = %d is picked\n", taskId)
+		log.Println("TaskId: ", taskId)
+		log.Printf("Task with id = %d is picked\n", taskId)
 
 		go func() {
 			execute(taskId)
@@ -104,7 +103,7 @@ func handleTaskExecution() {
 }
 
 func scanTasks() (int, error) {
-	fmt.Println("Inside scanTasks")
+	log.Println("Scanning tasks")
 	var taskId int
 
 	ctx := context.Background()
@@ -126,7 +125,7 @@ func scanTasks() (int, error) {
 
 	_, err = tx.Exec("update tasks set pickedAt = now(), processedAt = now(), workerId = ?, status = ? WHERE id = ?", WORKER_ID, db.Processing, taskId)
 	if err != nil {
-		fmt.Println("Error in updating pickedAt")
+		log.Println("Error in updating pickedAt")
 		return -1, err
 	}
 
@@ -152,25 +151,24 @@ func execute(taskId int) {
 	if err := row.Scan(&id, &name); err != nil {
 		if err == sql.ErrNoRows {
 			// TODO
-			fmt.Printf("No such task with taskId = %d\n", taskId)
+			log.Printf("No such task with taskId = %d\n", taskId)
 		} else {
-			fmt.Println("Error in scanning row")
-			fmt.Println(err)
+			log.Println("Error in scanning row: ", err)
 		}
 		return
 	}
 
-	fmt.Printf("Starting sleep for taskId = %d at %d\n", taskId, time.Now().Unix())
-	fmt.Printf("Task %d: %s\n", taskId, name)
+	log.Printf("Starting work for taskId = %d\n", taskId)
+	log.Printf("Task %d: %s\n", taskId, name)
 	time.Sleep(time.Minute)
-	fmt.Printf("Sleep done for taskId = %d at %d\n", taskId, time.Now().Unix())
+	log.Printf("Completed work for taskId = %d\n", taskId)
 
 	cancelHeartbeat()
 
-	fmt.Printf("Updating completed at for taskId = %d at %d\n", taskId, time.Now().Unix())
+	log.Printf("Updating completed at for taskId = %d\n", taskId)
 	_, err := db.DBCon.Exec("update tasks set completedAt = now(), status = ? WHERE id = ? and workerId = ?", db.Completed, taskId, WORKER_ID)
 	if err != nil {
-		fmt.Println("Error in updating completedAt")
+		log.Println("Error in updating completedAt: ", err)
 		return
 	}
 
@@ -183,18 +181,17 @@ func sendHeartbeat(ctx context.Context, taskId int) {
 	for {
 		select {
 		case <-ctx.Done(): // if cancelHeartbeat() execute
-			fmt.Printf("Shutting down hearbeat for taskId = %d at %d\n", taskId, time.Now().Unix())
+			log.Printf("Shutting down hearbeat for taskId = %d\n", taskId)
 			return
 		case <-heartbeatTicker.C:
-			fmt.Printf("Sending hearbeat for taskId = %d at %d\n", taskId, time.Now().Unix())
+			log.Printf("Sending hearbeat for taskId = %d\n", taskId)
 			_, err := db.DBCon.ExecContext(ctx, "update tasks set processedAt = now() WHERE id = ? and workerId = ?", taskId, WORKER_ID)
 			if err != nil {
 				if err == context.Canceled {
-					fmt.Printf("Shutting down hearbeat for taskId = %d at %d\n", taskId, time.Now().Unix())
+					log.Printf("Shutting down hearbeat for taskId = %d\n", taskId)
 					return
 				}
-				fmt.Printf("Error in sending heartbeat for taskId = %d at %d\n", taskId, time.Now().Unix())
-				fmt.Println(err)
+				log.Println(fmt.Sprintf("Error in sending heartbeat for taskId = %d", taskId), err)
 			}
 		}
 	}
