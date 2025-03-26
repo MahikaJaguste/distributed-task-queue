@@ -33,8 +33,6 @@ func StartSubmissionServer(port int) {
 func handleTaskSubmission(w http.ResponseWriter, req *http.Request) {
 	data, err := forms.Parse(req)
 	if err != nil {
-		// in case of any error
-		// TODO
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -43,14 +41,13 @@ func handleTaskSubmission(w http.ResponseWriter, req *http.Request) {
 
 	result, err := db.DBCon.Exec("INSERT INTO tasks (name, status) VALUES (?, ?)", name, db.Pending)
 	if err != nil {
-		// TODO
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	id, err := result.LastInsertId()
 	if err != nil {
-		// TODO
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	log.Printf("Task created with id = %d\n", id)

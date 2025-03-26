@@ -150,7 +150,6 @@ func execute(taskId int) {
 	var name string
 	if err := row.Scan(&id, &name); err != nil {
 		if err == sql.ErrNoRows {
-			// TODO
 			log.Printf("No such task with taskId = %d\n", taskId)
 		} else {
 			log.Println("Error in scanning row: ", err)

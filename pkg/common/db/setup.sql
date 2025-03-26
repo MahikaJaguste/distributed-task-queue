@@ -15,4 +15,6 @@ create table if not exists workerCount (
     count int
 );
 
+create index idx_status ON tasks (status);
+
 insert into workerCount (count) values (1);
