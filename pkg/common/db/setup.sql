@@ -6,7 +6,7 @@ create table tasks (
     pickedAt timestamp,
     processedAt timestamp,
     completedAt timestamp,
-    workerId mediuminint,
+    workerId int,
     status int
 );
 
