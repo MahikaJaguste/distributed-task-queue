@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"runtime"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -73,6 +74,8 @@ func handleTaskExecution() {
 
 	for range ticker.C {
 
+		log.Printf("Number of Running Goroutines: %d\n", runtime.NumGoroutine())
+
 		select {
 		case parallelWorkers <- struct{}{}: // Only proceed if there's a free slot
 		default:
@@ -115,7 +118,7 @@ func scanTasks() (int, error) {
 	// Defer a rollback in case anything fails.
 	defer tx.Rollback()
 
-	row := tx.QueryRow("select id from tasks where status = ? limit 1 for update skip locked", db.Pending)
+	row := tx.QueryRow("select id from tasks where status = ? limit 1 for update of tasks skip locked", db.Pending)
 
 	if err := row.Scan(&taskId); err != nil {
 		if err == sql.ErrNoRows {
