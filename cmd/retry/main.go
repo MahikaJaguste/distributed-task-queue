@@ -1,9 +1,9 @@
 package main
 
-import (
-	"github.com/MahikaJaguste/distributed-task-queue/pkg/retry"
-)
+// import (
+// 	"github.com/MahikaJaguste/distributed-task-queue/pkg/retry"
+// )
 
-func main() {
-	retry.StartRetryJobServer()
-}
+// func main() {
+// 	retry.StartRetryJobServer()
+// }

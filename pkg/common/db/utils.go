@@ -1,16 +1,16 @@
 package db
 
 import (
-	"database/sql"
+	"context"
 	"log"
 	"os"
 	"time"
 
-	"github.com/go-sql-driver/mysql"
+	"github.com/redis/go-redis/v9"
 )
 
 var (
-	DBCon *sql.DB
+	RDB *redis.Client
 )
 
 var ENV_FILE_PATH = "../../.env"
@@ -34,28 +34,16 @@ const (
 
 func SetupDb() {
 
-	cfg := mysql.Config{
-		User:      os.Getenv("DB_USER"),
-		Passwd:    os.Getenv("DB_PASSWORD"),
-		Net:       "tcp",
-		Addr:      os.Getenv("DB_HOST"),
-		DBName:    os.Getenv("DB_NAME"),
-		ParseTime: true,
+	RDB = redis.NewClient(&redis.Options{
+		Addr: os.Getenv("REDIS_ADDRESS"),
+		// Password: os.Getenv("REDIS_PASSWORD"),
+		DB: 0, // use default DB
+	})
+
+	resp := RDB.Ping(context.Background())
+	if resp.Err() != nil {
+		log.Fatal(resp.Err())
 	}
 
-	var err error
-	DBCon, err = sql.Open("mysql", cfg.FormatDSN())
-	if err != nil {
-		panic(err)
-	}
-	DBCon.SetConnMaxLifetime(time.Minute * 3)
-	DBCon.SetMaxOpenConns(10)
-	DBCon.SetMaxIdleConns(10)
-
-	pingErr := DBCon.Ping()
-	if pingErr != nil {
-		log.Fatal(pingErr)
-	}
-
-	log.Println("DB Connected!")
+	log.Println("Redis Connected!")
 }

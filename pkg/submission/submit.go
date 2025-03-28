@@ -1,15 +1,19 @@
 package submission
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/MahikaJaguste/distributed-task-queue/pkg/common/db"
+	"github.com/albrow/forms"
 	"github.com/joho/godotenv"
-
-	forms "github.com/albrow/forms"
+	"github.com/redis/go-redis/v9"
 )
+
+var STREAM_KEY string
 
 func StartSubmissionServer(port int) {
 	err := godotenv.Load(db.ENV_FILE_PATH)
@@ -21,13 +25,13 @@ func StartSubmissionServer(port int) {
 	mux.HandleFunc("POST /submit", handleTaskSubmission)
 
 	db.SetupDb()
+	STREAM_KEY = os.Getenv("STREAM_KEY")
 
 	log.Printf("Submission server listening on %d!\n", port)
 	err = http.ListenAndServe(fmt.Sprintf(":%d", port), mux)
 	if err != nil {
 		log.Fatal(err)
 	}
-
 }
 
 func handleTaskSubmission(w http.ResponseWriter, req *http.Request) {
@@ -39,17 +43,21 @@ func handleTaskSubmission(w http.ResponseWriter, req *http.Request) {
 
 	name := data.Get("name")
 
-	result, err := db.DBCon.Exec("INSERT INTO tasks (name, status) VALUES (?, ?)", name, db.Pending)
+	args := redis.XAddArgs{
+		Stream: STREAM_KEY,
+		ID:     "*",
+		Values: map[string]interface{}{
+			"name": name,
+		},
+	}
+	result := db.RDB.XAdd(context.Background(), &args)
+	id, err := result.Result()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
 		return
 	}
 
-	id, err := result.LastInsertId()
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	log.Printf("Task created with id = %d\n", id)
-	w.Write(([]byte)(fmt.Sprintf("Task created with id = %d\n", id)))
+	log.Printf("Task created with id = %s\n", id)
+	w.Write(([]byte)(fmt.Sprintf("Task created with id = %s\n", id)))
 }
